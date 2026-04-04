@@ -6,7 +6,6 @@ const fs = require('fs');
 
 app.use(express.static('public'));
 
-// Load Categories
 let categories = JSON.parse(fs.readFileSync('./categories.json', 'utf8'));
 fs.watchFile('./categories.json', () => {
     try {
@@ -81,10 +80,7 @@ function startNewRound(code) {
     io.to(room.players[room.gameState.giverIndex].id).emit('secret-target', room.gameState.targetValue);
 }
 
-// MAIN CONNECTION LOGIC
 io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
-
     socket.on('create-room', (username) => {
         const code = generateCode();
         socket.join(code);
@@ -114,6 +110,13 @@ io.on('connection', (socket) => {
         room.gameState.currentRound = 1;
         room.gameState.maxRounds = room.players.length * 3;
         startNewRound(code);
+    });
+
+    socket.on('end-game', (code) => {
+        const room = gameRooms[code];
+        if (room) {
+            io.to(code).emit('game-over', room.players);
+        }
     });
 
     socket.on('next-round', (code) => {
@@ -156,23 +159,16 @@ io.on('connection', (socket) => {
         }
     });
 
-    // DISCONNECT LOGIC (Now correctly inside the connection block)
     socket.on('disconnect', () => {
         for (const code in gameRooms) {
             const room = gameRooms[code];
             const index = room.players.findIndex(p => p.id === socket.id);
-
             if (index !== -1) {
                 room.players.splice(index, 1);
-                console.log(`Player left. ${room.players.length} remains in ${code}`);
-
                 if (room.players.length === 0) {
                     delete gameRooms[code];
-                    console.log(`Room ${code} was empty and has been deleted.`);
                 } else {
                     io.to(code).emit('update-lobby', room.players);
-                    
-                    // Send the host message to the new first player in line
                     if (room.players[0]) {
                         io.to(room.players[0].id).emit('you-are-host');
                     }
@@ -185,5 +181,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });

@@ -156,6 +156,33 @@ io.on('connection', (socket) => {
         }
     });
 });
+socket.on('disconnect', () => {
+    for (const code in gameRooms) {
+        const room = gameRooms[code];
+        const index = room.players.findIndex(p => p.id === socket.id);
+
+        if (index !== -1) {
+            // Remove the player
+            room.players.splice(index, 1);
+            console.log(`Player left. ${room.players.length} remains in ${code}`);
+
+            if (room.players.length === 0) {
+                delete gameRooms[code];
+                console.log(`Room ${code} was empty and has been deleted.`);
+            } else {
+                // HOST MIGRATION: 
+                // Since the list changed, the person at room.players[0] 
+                // is now the leader. We emit the updated list to everyone.
+                io.to(code).emit('update-lobby', room.players);
+                
+                // We also send a specific message so the new leader 
+                // knows to show their "Start Game" button.
+                io.to(room.players[0].id).emit('you-are-host');
+            }
+            break; 
+        }
+    }
+});
 
 // This tells the game: "Use the port Render gives me, otherwise use 3000"
 const PORT = process.env.PORT || 3000;

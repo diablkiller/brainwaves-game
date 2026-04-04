@@ -28,11 +28,13 @@
         button { padding: 12px 25px; margin: 10px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; transition: all 0.2s; font-family: inherit;}
         button:hover:not(:disabled) { filter: brightness(1.2); transform: translateY(-2px);}
         button:disabled { background: #333 !important; color: #777; opacity: 0.5;}
-        .btn-main { background: #5352ed; color: #fff; width: 80%; }
+        .btn-main { background: #5352ed; color: #fff; width: 80%; display: inline-block; }
         .btn-clue { background: #2ed573; color: #fff; }
         .btn-lock { background: #ff4757; color: #fff; }
+        .btn-black { background: #000; color: #fff; width: auto; border: 1px solid #444; }
         input { background: #111; color: #fff; border: 2px solid #555; padding: 12px; border-radius: 10px; width: 80%; margin-bottom: 10px; font-family: inherit;}
         .gain-text { color: #2ed573; font-weight: bold; margin-left: 5px; }
+        .host-tag { color: #ff4757; font-weight: bold; font-size: 0.8rem; margin-left: 5px; }
         .room-tag { background: #ffa502; color: #000; padding: 5px 15px; border-radius: 8px; font-weight: bold; display: inline-block; margin-bottom: 10px; }
     </style>
 </head>
@@ -52,8 +54,8 @@
         <div id="waiting-screen" class="screen">
             <div id="room-display" class="room-tag">CODE: ----</div>
             <div id="lobby-list"></div>
-            <div id="host-controls" style="margin-top: 20px;">
-                <button id="start-game-btn" class="btn-main" style="display:none; background:#ffa502;" onclick="startGame()">START GAME</button>
+            <div id="host-controls" style="margin-top: 20px; text-align: center;">
+                <button id="start-game-btn" class="btn-main" style="display:none; background:#ffa502; margin: 0 auto;" onclick="startGame()">START GAME</button>
             </div>
         </div>
 
@@ -85,6 +87,8 @@
                 <button id="lockBtn" class="btn-lock" onclick="lockGuess()" disabled>LOCK IN GUESS</button>
             </div>
             <div id="scoreboard" style="margin-top:20px; border-top:1px solid #444; padding-top:15px;"></div>
+            
+            <button id="host-end-btn" class="btn-black" style="display:none; margin-top: 20px;" onclick="endGameNow()">END GAME</button>
         </div>
 
         <div id="end-screen" class="screen">
@@ -97,16 +101,18 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myRole = '', isMoving = false, currentAngle = 0, canInteract = false, currentRoom = '';
+        let myRole = '', isMoving = false, currentAngle = 0, canInteract = false, currentRoom = '', isHost = false;
 
         function createRoom() { const n = document.getElementById('nameInput').value; if(n) socket.emit('create-room', n); }
         function joinRoom() { const n = document.getElementById('nameInput').value; const c = document.getElementById('codeInput').value; if(n && c) socket.emit('join-room', { code: c.toUpperCase(), username: n }); }
         function rerollCategory() { socket.emit('reroll-category', currentRoom); }
         function startGame() { socket.emit('start-game', currentRoom); }
         function nextRound() { socket.emit('next-round', currentRoom); }
+        function endGameNow() { socket.emit('end-game', currentRoom); }
 
         socket.on('room-created', (c) => { 
             currentRoom = c; 
+            isHost = true;
             document.getElementById('room-display').innerText = "ROOM CODE: " + c; 
             document.getElementById('start-game-btn').style.display = 'block'; 
             showScreen('waiting-screen'); 
@@ -114,21 +120,20 @@
 
         socket.on('joined-successfully', (c) => { 
             currentRoom = c; 
-            document.getElementById('room-display').innerText = "ROOM CODE: " + c; 
             showScreen('waiting-screen'); 
+            document.getElementById('room-display').innerText = "ROOM CODE: " + c; 
         });
 
-        // --- FIX: HOST MIGRATION LISTENER ---
         socket.on('you-are-host', () => {
-            const startButton = document.getElementById('start-game-btn');
-            const waitingScreen = document.getElementById('waiting-screen');
-            if (startButton && waitingScreen.classList.contains('active')) {
-                startButton.style.display = 'block';
-            }
+            isHost = true;
+            const startBtn = document.getElementById('start-game-btn');
+            const endBtn = document.getElementById('host-end-btn');
+            if (document.getElementById('waiting-screen').classList.contains('active')) startBtn.style.display = 'block';
+            if (document.getElementById('dial-screen').classList.contains('active')) endBtn.style.display = 'inline-block';
         });
 
         socket.on('update-lobby', (l) => { 
-            document.getElementById('lobby-list').innerHTML = "<h3>Players:</h3>" + l.map(p => `<div>${p.name}</div>`).join(''); 
+            document.getElementById('lobby-list').innerHTML = "<h3>Players:</h3>" + l.map((p, i) => `<div>${p.name} ${i === 0 ? '<span class="host-tag">(Host)</span>' : ''}</div>`).join(''); 
         });
 
         socket.on('assigned-role', (r) => { 
@@ -143,6 +148,7 @@
         socket.on('game-transition', (d) => { 
             showScreen('dial-screen'); 
             resetUI(); 
+            if(isHost) document.getElementById('host-end-btn').style.display = 'inline-block';
             document.getElementById('round-display').innerText = `Round ${d.round} / ${d.totalRounds}`; 
             document.getElementById('left-label').innerText = d.category[0]; 
             document.getElementById('right-label').innerText = d.category[1]; 
@@ -214,14 +220,18 @@
             if(myRole === 'Giver') document.getElementById('nextRoundBtn').style.display = 'inline-block'; 
         });
 
-        socket.on('game-over', (p) => { showScreen('end-screen'); updateScoreUI('final-scoreboard', p); });
+        socket.on('game-over', (p) => { 
+            showScreen('end-screen'); 
+            updateScoreUI('final-scoreboard', p); 
+        });
 
         function updateScoreUI(id, p, showGain = false) { 
             const sorted = [...p].sort((a,b) => b.score - a.score);
             document.getElementById(id).innerHTML = "<h3>Leaderboard</h3>" + 
-                sorted.map(x => {
+                sorted.map((x, i) => {
                     const gain = (showGain && x.lastGain > 0) ? `<span class="gain-text">(+${x.lastGain})</span>` : "";
-                    return `<div style="margin:5px 0;"><span style="color:#ffa502; font-weight:bold;">${x.name}:</span> ${x.score} pts ${gain}</div>`;
+                    const hostLabel = (p[0] && x.id === p[0].id) ? `<span class="host-tag">(Host)</span>` : "";
+                    return `<div style="margin:5px 0;"><span style="color:#ffa502; font-weight:bold;">${x.name}${hostLabel}:</span> ${x.score} pts ${gain}</div>`;
                 }).join(''); 
         }
 

@@ -6,6 +6,7 @@ const fs = require('fs');
 
 app.use(express.static('public'));
 
+// Load Categories
 let categories = JSON.parse(fs.readFileSync('./categories.json', 'utf8'));
 fs.watchFile('./categories.json', () => {
     try {
@@ -24,10 +25,8 @@ function calculateScores(code) {
     let bestGuessDiff = 999;
     const giver = room.players[room.gameState.giverIndex];
 
-    // Reset lastGain for everyone before calculating
     room.players.forEach(p => p.lastGain = 0);
 
-    // Calculate Guesser scores
     Object.keys(room.gameState.guesses).forEach(id => {
         const diff = Math.abs(room.gameState.targetValue - room.gameState.guesses[id].angle);
         if (diff < bestGuessDiff) bestGuessDiff = diff;
@@ -40,11 +39,10 @@ function calculateScores(code) {
         const p = room.players.find(pl => pl.id === id);
         if (p) {
             p.score += pts;
-            p.lastGain = pts; // Track what they just earned
+            p.lastGain = pts;
         }
     });
 
-    // GIVER REWARD LOGIC
     if (giver) {
         let giverPts = 0;
         if (bestGuessDiff <= 4) giverPts = 3;
@@ -64,7 +62,6 @@ function startNewRound(code) {
     room.gameState.targetValue = Math.floor(Math.random() * 160) + 10;
     room.gameState.category = categories[Math.floor(Math.random() * categories.length)];
     
-    // Clear lastGain when a new round starts
     room.players.forEach(p => {
         p.lastGain = 0;
         p.role = 'Guesser'; 
@@ -84,7 +81,10 @@ function startNewRound(code) {
     io.to(room.players[room.gameState.giverIndex].id).emit('secret-target', room.gameState.targetValue);
 }
 
+// MAIN CONNECTION LOGIC
 io.on('connection', (socket) => {
+    console.log('User connected:', socket.id);
+
     socket.on('create-room', (username) => {
         const code = generateCode();
         socket.join(code);
@@ -155,38 +155,35 @@ io.on('connection', (socket) => {
             io.to(code).emit('category-updated', room.gameState.category);
         }
     });
-});
-socket.on('disconnect', () => {
-    for (const code in gameRooms) {
-        const room = gameRooms[code];
-        const index = room.players.findIndex(p => p.id === socket.id);
 
-        if (index !== -1) {
-            // Remove the player
-            room.players.splice(index, 1);
-            console.log(`Player left. ${room.players.length} remains in ${code}`);
+    // DISCONNECT LOGIC (Now correctly inside the connection block)
+    socket.on('disconnect', () => {
+        for (const code in gameRooms) {
+            const room = gameRooms[code];
+            const index = room.players.findIndex(p => p.id === socket.id);
 
-            if (room.players.length === 0) {
-                delete gameRooms[code];
-                console.log(`Room ${code} was empty and has been deleted.`);
-            } else {
-                // HOST MIGRATION: 
-                // Since the list changed, the person at room.players[0] 
-                // is now the leader. We emit the updated list to everyone.
-                io.to(code).emit('update-lobby', room.players);
-                
-                // We also send a specific message so the new leader 
-                // knows to show their "Start Game" button.
-                io.to(room.players[0].id).emit('you-are-host');
+            if (index !== -1) {
+                room.players.splice(index, 1);
+                console.log(`Player left. ${room.players.length} remains in ${code}`);
+
+                if (room.players.length === 0) {
+                    delete gameRooms[code];
+                    console.log(`Room ${code} was empty and has been deleted.`);
+                } else {
+                    io.to(code).emit('update-lobby', room.players);
+                    
+                    // Send the host message to the new first player in line
+                    if (room.players[0]) {
+                        io.to(room.players[0].id).emit('you-are-host');
+                    }
+                }
+                break; 
             }
-            break; 
         }
-    }
+    });
 });
 
-// This tells the game: "Use the port Render gives me, otherwise use 3000"
 const PORT = process.env.PORT || 3000;
-
 http.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
 });

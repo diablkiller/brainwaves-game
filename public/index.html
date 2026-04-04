@@ -25,10 +25,10 @@
         button { padding: 12px 25px; margin: 10px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; transition: all 0.2s; font-family: inherit;}
         button:hover:not(:disabled) { filter: brightness(1.2); transform: translateY(-2px);}
         button:disabled { background: #333 !important; color: #777; opacity: 0.5;}
-        .btn-main { background: #5352ed; color: #fff; width: 80%; display: inline-block; margin-left: auto; margin-right: auto;}
+        .btn-main { background: #5352ed; color: #fff; width: 80%; display: block; margin: 10px auto; }
         .btn-clue { background: #2ed573; color: #fff; }
         .btn-lock { background: #ff4757; color: #fff; }
-        .btn-black { background: #444; color: #fff; width: auto; border: 1px solid #555; }
+        .btn-black { background: #444; color: #fff; border: 1px solid #555; }
         input { background: #111; color: #fff; border: 2px solid #555; padding: 12px; border-radius: 10px; width: 80%; margin-bottom: 10px; font-family: inherit;}
         .gain-text { color: #2ed573; font-weight: bold; margin-left: 5px; }
         .host-tag { color: #ff4757; font-weight: bold; font-size: 0.8rem; margin-right: 5px; }
@@ -51,8 +51,10 @@
         </div>
         <div id="waiting-screen" class="screen">
             <div id="room-display" class="room-tag">CODE: ----</div>
+            <br>
+            <button id="copy-link-btn" class="btn-black" onclick="copyGameLink()" style="font-size: 0.8rem; padding: 8px 15px; margin-bottom: 20px;">🔗 COPY INVITE LINK</button>
             <div id="lobby-list"></div>
-            <div id="host-controls" style="margin-top: 20px; display: flex; justify-content: center;">
+            <div id="host-controls" style="margin-top: 20px;">
                 <button id="start-game-btn" class="btn-main" style="display:none; background:#ffa502;" onclick="startGame()">START GAME</button>
             </div>
         </div>
@@ -79,26 +81,42 @@
             <div id="guesser-ui" style="display:none;">
                 <button id="lockBtn" class="btn-lock" onclick="lockGuess()" disabled>LOCK IN GUESS</button>
             </div>
-            <div id="spectator-ui" style="display:none; color: #ffa502; font-weight: bold;">
-                Watching mid-game... joining next round!
-            </div>
+            <div id="spectator-ui" style="display:none; color: #ffa502; font-weight: bold;">Watching mid-game... joining next round!</div>
             <div id="scoreboard" style="margin-top:20px; border-top:1px solid #444; padding-top:15px;"></div>
-            <button id="host-end-btn" class="btn-black" style="display:none; margin-top: 20px; margin-left: auto; margin-right: auto;" onclick="endGameNow()">END GAME</button>
+            <button id="host-end-btn" class="btn-black" style="display:none; margin: 20px auto 0;" onclick="endGameNow()">END GAME</button>
         </div>
         <div id="end-screen" class="screen">
             <h1 style="color:#ffa502;">FINAL SCORES</h1>
             <div id="final-scoreboard"></div>
             <br>
-            <div style="display: flex; flex-direction: column; align-items: center;">
-                <button id="host-restart-btn" class="btn-main" style="display:none; background:#2ed573;" onclick="startGame()">RESTART GAME</button>
-                <button class="btn-main" style="background:#444;" onclick="location.reload()">BACK TO MENU</button>
-            </div>
+            <button id="host-restart-btn" class="btn-main" style="display:none; background:#2ed573;" onclick="startGame()">RESTART GAME</button>
+            <button class="btn-main" style="background:#444;" onclick="location.reload()">BACK TO MENU</button>
         </div>
     </div>
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let myRole = '', isMoving = false, currentAngle = 0, canInteract = false, currentRoom = '', isHost = false;
+
+        window.onload = () => {
+            const pathCode = window.location.pathname.substring(1).toUpperCase();
+            if (pathCode && pathCode.length === 4) {
+                document.getElementById('codeInput').value = pathCode;
+                const joinBtn = document.querySelector('button[onclick="joinRoom()"]');
+                joinBtn.innerText = "JOIN ROOM: " + pathCode;
+                joinBtn.style.background = "#ffa502";
+                joinBtn.style.color = "#000";
+            }
+        };
+
+        function copyGameLink() {
+            navigator.clipboard.writeText(window.location.href).then(() => {
+                const btn = document.getElementById('copy-link-btn');
+                btn.innerText = "✅ LINK COPIED!";
+                btn.style.background = "#2ed573";
+                setTimeout(() => { btn.innerText = "🔗 COPY INVITE LINK"; btn.style.background = ""; }, 2000);
+            });
+        }
 
         function createRoom() { const n = document.getElementById('nameInput').value; if(n) socket.emit('create-room', n); }
         function joinRoom() { const n = document.getElementById('nameInput').value; const c = document.getElementById('codeInput').value; if(n && c) socket.emit('join-room', { code: c.toUpperCase(), username: n }); }
@@ -107,8 +125,20 @@
         function rerollCategory() { socket.emit('reroll-category', currentRoom); }
         function endGameNow() { socket.emit('end-game', currentRoom); }
 
-        socket.on('room-created', (c) => { currentRoom = c; isHost = true; document.getElementById('room-display').innerText = "ROOM CODE: " + c; document.getElementById('start-game-btn').style.display = 'block'; showScreen('waiting-screen'); });
-        socket.on('joined-successfully', (c) => { currentRoom = c; showScreen('waiting-screen'); document.getElementById('room-display').innerText = "ROOM CODE: " + c; });
+        socket.on('room-created', (c) => { 
+            currentRoom = c; isHost = true; 
+            window.history.pushState({}, '', '/' + c);
+            document.getElementById('room-display').innerText = "ROOM CODE: " + c; 
+            document.getElementById('start-game-btn').style.display = 'block'; 
+            showScreen('waiting-screen'); 
+        });
+
+        socket.on('joined-successfully', (c) => { 
+            currentRoom = c; 
+            window.history.pushState({}, '', '/' + c);
+            showScreen('waiting-screen'); 
+            document.getElementById('room-display').innerText = "ROOM CODE: " + c; 
+        });
 
         socket.on('notification', (msg) => {
             const toast = document.getElementById('notification-toast');
@@ -119,7 +149,7 @@
         socket.on('you-are-host', () => {
             isHost = true;
             if (document.getElementById('waiting-screen').classList.contains('active')) document.getElementById('start-game-btn').style.display = 'block';
-            if (document.getElementById('dial-screen').classList.contains('active')) document.getElementById('host-end-btn').style.display = 'inline-block';
+            if (document.getElementById('dial-screen').classList.contains('active')) document.getElementById('host-end-btn').style.display = 'block';
             if (document.getElementById('end-screen').classList.contains('active')) document.getElementById('host-restart-btn').style.display = 'block';
         });
 
@@ -151,7 +181,7 @@
 
         socket.on('game-transition', (d) => { 
             showScreen('dial-screen'); resetUI(); 
-            if (isHost) document.getElementById('host-end-btn').style.display = 'inline-block';
+            if (isHost) document.getElementById('host-end-btn').style.display = 'block';
             if (myRole === 'Spectator') {
                 document.getElementById('guesser-ui').style.display = 'none';
                 document.getElementById('spectator-ui').style.display = 'block';

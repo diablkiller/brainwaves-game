@@ -4,7 +4,7 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const fs = require('fs');
 
-app.use(express.static('Public'));
+app.use(express.static('public'));
 
 let categories = JSON.parse(fs.readFileSync('./categories.json', 'utf8'));
 fs.watchFile('./categories.json', () => {

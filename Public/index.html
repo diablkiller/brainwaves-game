@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BrainWaves</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Lexend:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --target-rotation: 0deg; }
+        body { font-family: 'Lexend', sans-serif; background: radial-gradient(circle, #2c2c2c 0%, #000000 100%); color: #ffffff; text-align: center; margin: 0; min-height: 100vh; padding: 20px; overflow-x: hidden; touch-action: manipulation; }
+        .main-title { font-family: 'Fredoka One', cursive; font-size: clamp(2rem, 8vw, 4rem); color: #ffffff; text-shadow: 0 0 20px rgba(255, 255, 255, 0.3), 4px 4px 0px #333; margin-bottom: 30px;}
+        .card { background: rgba(40, 40, 40, 0.8); backdrop-filter: blur(10px); padding: clamp(15px, 5vw, 30px); border-radius: 25px; max-width: 650px; margin: auto; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 20px 50px rgba(0,0,0,0.5);}
+        .screen { display: none; }
+        .active { display: block; }
+        
+        #dial-container { position: relative; width: 300px; height: 150px; background: #f0f0f0; border-radius: 150px 150px 0 0; margin: 40px auto 10px; border: 8px solid #444; cursor: pointer; }
+        #clip-layer { position: absolute; width: 100%; height: 100%; top: 0; left: 0; border-radius: inherit; overflow: hidden; z-index: 1; }
+        #target-wedge { position: absolute; width: 310px; height: 310px; top: -5px; left: -5px; background: conic-gradient(from 0deg, transparent 0deg, #ff4757 0deg 8.5deg, #ffa502 8deg 16.5deg, #2ed573 16deg 24.5deg, #ffa502 24deg 32.5deg, #ff4757 32deg 40deg, transparent 40deg 360deg); transform-origin: center center; display: none; pointer-events: none;}
+        #target-wedge.reveal-anim { display: block !important; animation: fanOut 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes fanOut { from { opacity: 0; transform: scale(0.5) rotate(-120deg); } to { opacity: 1; transform: scale(1) rotate(var(--target-rotation)); } }
+        
+        #guess-layer { position: absolute; width: 100%; height: 100%; top: 0; left: 0; pointer-events: none; z-index: 20; }
+        #needle { position: absolute; width: 5px; height: 140px; background: #111; left: 50%; bottom: 0; transform: translateX(-50%) rotate(0deg); transform-origin: bottom center; z-index: 10; border-radius: 5px; transition: transform 0.1s ease-out; }
+        #dial-pivot { position: absolute; width: 28px; height: 28px; background: #ff4757; border-radius: 50%; border: 4px solid #111; left: 50%; bottom: -14px; transform: translateX(-50%); z-index: 50; }
+        .guess-needle { position: absolute; width: 3px; height: 140px; background: #000; left: 50%; bottom: 0; transform-origin: bottom center; z-index: 5; }
+        .guess-label { position: absolute; top: -25px; left: 50%; transform: translateX(-50%); background: #fff; color: #000; padding: 2px 8px; font-size: 12px; font-weight: bold; border-radius: 4px; border: 2px solid #000; white-space: nowrap; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+
+        button { padding: 12px 25px; margin: 10px; border-radius: 12px; border: none; cursor: pointer; font-weight: 700; transition: all 0.2s; font-family: inherit;}
+        button:hover:not(:disabled) { filter: brightness(1.2); transform: translateY(-2px);}
+        button:disabled { background: #333 !important; color: #777; opacity: 0.5;}
+        .btn-main { background: #5352ed; color: #fff; width: 80%; }
+        .btn-clue { background: #2ed573; color: #fff; }
+        .btn-lock { background: #ff4757; color: #fff; }
+        input { background: #111; color: #fff; border: 2px solid #555; padding: 12px; border-radius: 10px; width: 80%; margin-bottom: 10px; font-family: inherit;}
+        .gain-text { color: #2ed573; font-weight: bold; margin-left: 5px; }
+        .room-tag { background: #ffa502; color: #000; padding: 5px 15px; border-radius: 8px; font-weight: bold; display: inline-block; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h1 class="main-title">BrainWaves</h1>
+    <div class="card">
+        <div id="lobby-screen" class="screen active">
+            <input type="text" id="nameInput" placeholder="Enter Nickname">
+            <br>
+            <button class="btn-main" onclick="createRoom()">CREATE NEW ROOM</button>
+            <div style="margin: 20px 0; color: #666;">— OR —</div>
+            <input type="text" id="codeInput" placeholder="Enter Room Code">
+            <br>
+            <button class="btn-main" style="background: #2ed573;" onclick="joinRoom()">JOIN EXISTING ROOM</button>
+        </div>
+
+        <div id="waiting-screen" class="screen">
+            <div id="room-display" class="room-tag">CODE: ----</div>
+            <div id="lobby-list"></div>
+            <div id="host-controls" style="display:none; margin-top: 20px;">
+                <button class="btn-main" style="background:#ffa502;" onclick="startGame()">START GAME</button>
+            </div>
+        </div>
+
+        <div id="dial-screen" class="screen">
+            <div id="round-display" style="color:#ffa502; font-weight:bold; margin-bottom: 10px;"></div>
+            <h2 id="roleDisplay" style="color: #bbb; font-size: 1.1rem;"></h2>
+            <h3 id="display-clue" style="font-size: 1.5rem; margin: 10px 0;">Waiting for Giver...</h3>
+            
+            <div id="dial-container" onmousedown="startMove(event)" onmousemove="doMove(event)" onmouseup="stopMove()" ontouchstart="startMove(event)" ontouchmove="doMove(event)" ontouchend="stopMove()">
+                <div id="clip-layer"><div id="target-wedge"></div></div>
+                <div id="needle"></div>
+                <div id="guess-layer"></div>
+                <div id="dial-pivot"></div>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; width:300px; margin: 0 auto 20px; font-weight: bold;">
+                <div id="left-label" style="background:#111; padding:8px; border-radius:8px; min-width:110px;">LEFT</div>
+                <div id="right-label" style="background:#111; padding:8px; border-radius:8px; min-width:110px;">RIGHT</div>
+            </div>
+
+            <div id="giver-ui" style="display:none;">
+                <input type="text" id="clueInput" placeholder="Enter one-word clue...">
+                <button id="sendClueBtn" class="btn-clue" onclick="sendClue()">SEND CLUE</button>
+                <button id="rerollBtn" style="background: #ffa502; color: #000;" onclick="rerollCategory()">REROLL 🎲</button>
+                <br><button id="nextRoundBtn" class="btn-main" onclick="nextRound()" style="display:none; background:#1e90ff; width: auto;">NEXT ROUND</button>
+            </div>
+
+            <div id="guesser-ui" style="display:none;">
+                <button id="lockBtn" class="btn-lock" onclick="lockGuess()" disabled>LOCK IN GUESS</button>
+            </div>
+            <div id="scoreboard" style="margin-top:20px; border-top:1px solid #444; padding-top:15px;"></div>
+        </div>
+
+        <div id="end-screen" class="screen">
+            <h1 style="color:#ffa502;">FINAL SCORES</h1>
+            <div id="final-scoreboard"></div>
+            <br><button class="btn-main" onclick="location.reload()">BACK TO MENU</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let myRole = '', isMoving = false, currentAngle = 0, canInteract = false, currentRoom = '';
+
+        function createRoom() { const n = document.getElementById('nameInput').value; if(n) socket.emit('create-room', n); }
+        function joinRoom() { const n = document.getElementById('nameInput').value; const c = document.getElementById('codeInput').value; if(n && c) socket.emit('join-room', { code: c.toUpperCase(), username: n }); }
+        function rerollCategory() { socket.emit('reroll-category', currentRoom); }
+        function startGame() { socket.emit('start-game', currentRoom); }
+        function nextRound() { socket.emit('next-round', currentRoom); }
+
+        socket.on('room-created', (c) => { currentRoom = c; document.getElementById('room-display').innerText = "ROOM CODE: " + c; document.getElementById('host-controls').style.display = 'block'; showScreen('waiting-screen'); });
+        socket.on('joined-successfully', (c) => { currentRoom = c; document.getElementById('room-display').innerText = "ROOM CODE: " + c; showScreen('waiting-screen'); });
+        socket.on('update-lobby', (l) => { document.getElementById('lobby-list').innerHTML = "<h3>Players:</h3>" + l.map(p => `<div>${p.name}</div>`).join(''); });
+
+        socket.on('assigned-role', (r) => { 
+            myRole = r; 
+            document.getElementById('roleDisplay').innerText = "You are the: " + r; 
+            document.getElementById('giver-ui').style.display = (r === 'Giver') ? 'block' : 'none'; 
+            document.getElementById('guesser-ui').style.display = (r === 'Giver') ? 'none' : 'block'; 
+            document.getElementById('needle').style.display = (r === 'Giver') ? 'none' : 'block'; 
+            if(r === 'Giver') document.getElementById('sendClueBtn').disabled = false; 
+        });
+
+        socket.on('game-transition', (d) => { 
+            showScreen('dial-screen'); 
+            resetUI(); 
+            document.getElementById('round-display').innerText = `Round ${d.round} / ${d.totalRounds}`; 
+            document.getElementById('left-label').innerText = d.category[0]; 
+            document.getElementById('right-label').innerText = d.category[1]; 
+            updateScoreUI('scoreboard', d.players); 
+        });
+
+        socket.on('category-updated', (c) => { 
+            document.getElementById('left-label').innerText = c[0]; 
+            document.getElementById('right-label').innerText = c[1]; 
+        });
+
+        socket.on('secret-target', (v) => { 
+            const w = document.getElementById('target-wedge'); 
+            document.documentElement.style.setProperty('--target-rotation', `${v - 90 - 20}deg`); 
+            w.classList.add('reveal-anim'); 
+        });
+
+        function sendClue() { 
+            const c = document.getElementById('clueInput').value; 
+            if(c) { 
+                socket.emit('submit-clue', { code: currentRoom, clue: c }); 
+                document.getElementById('sendClueBtn').disabled = true; 
+                document.getElementById('rerollBtn').style.display = 'none'; 
+            } 
+        }
+
+        socket.on('clue-received', (c) => { 
+            document.getElementById('display-clue').innerText = "CLUE: " + c; 
+            if(myRole !== 'Giver') { canInteract = true; document.getElementById('lockBtn').disabled = false; } 
+        });
+
+        function startMove(e) { if(canInteract) isMoving = true; doMove(e); }
+        function stopMove() { isMoving = false; }
+        function doMove(e) { 
+            if(!isMoving) return; 
+            e.preventDefault();
+            const container = document.getElementById('dial-container'); 
+            const rect = container.getBoundingClientRect(); 
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const x = clientX - (rect.left + rect.width / 2); 
+            const y = clientY - rect.bottom; 
+            let a = Math.atan2(y, x) * (180 / Math.PI); 
+            if (a <= 0) { 
+                currentAngle = a + 90; 
+                document.getElementById('needle').style.transform = `translateX(-50%) rotate(${currentAngle}deg)`; 
+            } 
+        }
+
+        function lockGuess() { 
+            canInteract = false; 
+            socket.emit('submit-guess', { code: currentRoom, angle: currentAngle + 90 }); 
+            document.getElementById('lockBtn').disabled = true; 
+            document.getElementById('lockBtn').innerText = "LOCKED"; 
+        }
+
+        socket.on('reveal-all', (d) => { 
+            const w = document.getElementById('target-wedge'); 
+            document.documentElement.style.setProperty('--target-rotation', `${d.target - 90 - 20}deg`); 
+            w.classList.add('reveal-anim'); 
+            d.guesses.forEach(g => { 
+                const n = document.createElement('div'); 
+                n.className = 'guess-needle'; 
+                n.style.transform = `rotate(${g.angle - 90}deg)`; 
+                n.innerHTML = `<div class="guess-label">${g.name}</div>`; 
+                document.getElementById('guess-layer').appendChild(n); 
+            }); 
+            updateScoreUI('scoreboard', d.players, true); 
+            if(myRole === 'Giver') document.getElementById('nextRoundBtn').style.display = 'inline-block'; 
+        });
+
+        socket.on('game-over', (p) => { showScreen('end-screen'); updateScoreUI('final-scoreboard', p); });
+
+        function updateScoreUI(id, p, showGain = false) { 
+            const sorted = [...p].sort((a,b) => b.score - a.score);
+            document.getElementById(id).innerHTML = "<h3>Leaderboard</h3>" + 
+                sorted.map(x => {
+                    const gain = (showGain && x.lastGain > 0) ? `<span class="gain-text">(+${x.lastGain})</span>` : "";
+                    return `<div style="margin:5px 0;"><span style="color:#ffa502; font-weight:bold;">${x.name}:</span> ${x.score} pts ${gain}</div>`;
+                }).join(''); 
+        }
+
+        function resetUI() { 
+            document.getElementById('display-clue').innerText = "Waiting for Giver..."; 
+            document.getElementById('target-wedge').classList.remove('reveal-anim'); 
+            document.getElementById('needle').style.transform = `translateX(-50%) rotate(0deg)`; 
+            currentAngle = 0; 
+            document.getElementById('lockBtn').innerText = "LOCK IN GUESS"; 
+            document.getElementById('clueInput').value = ""; 
+            document.getElementById('nextRoundBtn').style.display = 'none'; 
+            document.getElementById('rerollBtn').style.display = 'inline-block'; 
+            document.getElementById('guess-layer').innerHTML = ''; 
+            canInteract = false; 
+        }
+
+        function showScreen(id) { 
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); 
+            document.getElementById(id).classList.add('active'); 
+        }
+    </script>
+</body>
+</html>

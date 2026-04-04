@@ -138,6 +138,27 @@
             w.classList.add('reveal-anim'); 
         });
 
+        socket.on('you-are-host', () => {
+                    // This looks for your "Start Game" button and makes it visible
+            const startButton = document.getElementById('start-game-btn');
+            if (startButton) {
+                startButton.style.display = 'block';
+            }
+        });
+
+        socket.on('update-lobby', (players) => {
+                    // This updates the list of names when people join or leave
+            const list = document.getElementById('player-list');
+            if (list) {
+                list.innerHTML = '';
+                players.forEach(p => {
+                    const li = document.createElement('li');
+                    li.innerText = p.name;
+                    list.appendChild(li);
+        });
+            }
+        });
+
         function sendClue() { 
             const c = document.getElementById('clueInput').value; 
             if(c) { 

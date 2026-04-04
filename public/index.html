@@ -52,8 +52,8 @@
         <div id="waiting-screen" class="screen">
             <div id="room-display" class="room-tag">CODE: ----</div>
             <div id="lobby-list"></div>
-            <div id="host-controls" style="display:none; margin-top: 20px;">
-                <button class="btn-main" style="background:#ffa502;" onclick="startGame()">START GAME</button>
+            <div id="host-controls" style="margin-top: 20px;">
+                <button id="start-game-btn" class="btn-main" style="display:none; background:#ffa502;" onclick="startGame()">START GAME</button>
             </div>
         </div>
 
@@ -105,9 +105,31 @@
         function startGame() { socket.emit('start-game', currentRoom); }
         function nextRound() { socket.emit('next-round', currentRoom); }
 
-        socket.on('room-created', (c) => { currentRoom = c; document.getElementById('room-display').innerText = "ROOM CODE: " + c; document.getElementById('host-controls').style.display = 'block'; showScreen('waiting-screen'); });
-        socket.on('joined-successfully', (c) => { currentRoom = c; document.getElementById('room-display').innerText = "ROOM CODE: " + c; showScreen('waiting-screen'); });
-        socket.on('update-lobby', (l) => { document.getElementById('lobby-list').innerHTML = "<h3>Players:</h3>" + l.map(p => `<div>${p.name}</div>`).join(''); });
+        socket.on('room-created', (c) => { 
+            currentRoom = c; 
+            document.getElementById('room-display').innerText = "ROOM CODE: " + c; 
+            document.getElementById('start-game-btn').style.display = 'block'; 
+            showScreen('waiting-screen'); 
+        });
+
+        socket.on('joined-successfully', (c) => { 
+            currentRoom = c; 
+            document.getElementById('room-display').innerText = "ROOM CODE: " + c; 
+            showScreen('waiting-screen'); 
+        });
+
+        // --- FIX: HOST MIGRATION LISTENER ---
+        socket.on('you-are-host', () => {
+            const startButton = document.getElementById('start-game-btn');
+            const waitingScreen = document.getElementById('waiting-screen');
+            if (startButton && waitingScreen.classList.contains('active')) {
+                startButton.style.display = 'block';
+            }
+        });
+
+        socket.on('update-lobby', (l) => { 
+            document.getElementById('lobby-list').innerHTML = "<h3>Players:</h3>" + l.map(p => `<div>${p.name}</div>`).join(''); 
+        });
 
         socket.on('assigned-role', (r) => { 
             myRole = r; 
@@ -136,27 +158,6 @@
             const w = document.getElementById('target-wedge'); 
             document.documentElement.style.setProperty('--target-rotation', `${v - 90 - 20}deg`); 
             w.classList.add('reveal-anim'); 
-        });
-
-        socket.on('you-are-host', () => {
-                    // This looks for your "Start Game" button and makes it visible
-            const startButton = document.getElementById('start-game-btn');
-            if (startButton) {
-                startButton.style.display = 'block';
-            }
-        });
-
-        socket.on('update-lobby', (players) => {
-                    // This updates the list of names when people join or leave
-            const list = document.getElementById('player-list');
-            if (list) {
-                list.innerHTML = '';
-                players.forEach(p => {
-                    const li = document.createElement('li');
-                    li.innerText = p.name;
-                    list.appendChild(li);
-        });
-            }
         });
 
         function sendClue() { 

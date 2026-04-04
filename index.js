@@ -3,9 +3,11 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const fs = require('fs');
+const path = require('path');
 
 app.use(express.static('public'));
 
+// Load Categories
 let categories = JSON.parse(fs.readFileSync('./categories.json', 'utf8'));
 fs.watchFile('./categories.json', () => {
     try { categories = JSON.parse(fs.readFileSync('./categories.json', 'utf8')); } catch (e) { console.log("JSON Error."); }
@@ -100,7 +102,7 @@ io.on('connection', (socket) => {
         room.gameState.currentRound = 1;
         room.gameState.maxRounds = room.players.length * 3;
         room.gameState.giverIndex = 0;
-        room.players.forEach(p => p.score = 0); // Reset scores on start
+        room.players.forEach(p => p.score = 0);
         startNewRound(code);
     });
 
@@ -165,6 +167,16 @@ io.on('connection', (socket) => {
             }
         }
     });
+});
+
+// Deep linking for Render
+app.get('/:code', (req, res) => {
+    const code = req.params.code.toUpperCase();
+    if (code.length === 4) {
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    } else {
+        res.redirect('/');
+    }
 });
 
 const PORT = process.env.PORT || 3000;
